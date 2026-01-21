@@ -18,7 +18,7 @@ blueprint:
       description: The sensor entity provided by Zigbee2MQTT (e.g., sensor.somrig_action)
       selector:
         entity:
-          domain: sensor
+          domain: event
     mqtt_topic:
       name: MQTT Set Topic
       description: The Zigbee2MQTT topic to publish to (e.g., zigbee2mqtt/MyLight/set)
