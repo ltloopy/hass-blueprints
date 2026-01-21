@@ -1,5 +1,5 @@
 blueprint:
-  name: Ikea SOMRIG (MQTT Brightness Move)
+  name: Ikea SOMRIG Event Controls
   description: >
     Controls a light using Ikea SOMRIG. 
     Uses native MQTT 'brightness_move' commands for smooth dimming.
