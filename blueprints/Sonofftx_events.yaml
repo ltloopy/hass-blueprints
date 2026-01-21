@@ -1,0 +1,245 @@
+blueprint:
+  name: Sonoff TX Event Controls
+  description: >
+    Control lights Using a Sonoff TX With Custom Firmware.
+    
+    Up Single: Turn On (Auto AL)
+    Up Double: Max Brightness with AL Color Temp (Manual AL)
+    Up Tripple: Max Brightness 3000K (Manual AL)
+    Down Single: Turn Off
+    Down Double: Brightness 30% with AL Color Temp (Manual AL)
+    Down Tripple: Brightness 10% 2200K (Manual AL)
+    Up Held: Zigbee Dim Up (Manual AL)
+    Down Held: Zigbee Dim Down (Manual AL)
+    Up/Down Release: Stop Dimming
+    Swipe Up: Custom Action
+    Swipe Down: Custom Action
+    Full Touch: Custom Action
+    Long Touch Timeout: Custom Action
+
+  domain: automation
+  input:
+    event_entity:
+      name: Event Entity
+      description: The entity that triggers the events (e.g. event.wall_switch).
+      selector:
+        entity:
+          domain: event
+    
+    target_light:
+      name: Target Light
+      description: The main light entity to be controlled by button presses.
+      selector:
+        entity:
+          domain: light
+
+    adaptive_lighting_switch:
+      name: Adaptive Lighting Switch
+      description: The adaptive lighting switch entity to get color temperature from.
+      selector:
+        entity:
+          domain: switch
+          integration: adaptive_lighting
+
+    mqtt_topic:
+      name: MQTT Topic
+      description: The MQTT topic to send brightness_move commands to.
+      selector:
+        text:
+
+    swipe_up_action:
+      name: Swipe Up Action
+      description: The action to run on Swipe Up (e.g. Activate a Scene, Turn On a Fan, Run a Script).
+      default: []
+      selector:
+        action: {}
+        
+    swipe_down_action:
+      name: Swipe Down Action
+      description: The action to run on Swipe Down (e.g. Activate a Scene, Turn Off a Fan).
+      default: []
+      selector:
+        action: {}
+    
+    full_touch_action:
+      name: Full Touch Action   
+      description: The action to run on Full Touch.
+      default: []
+      selector:
+        action: {}
+
+trigger:
+  - platform: state
+    entity_id: !input event_entity
+    not_to: ""
+    not_from: ""
+
+action:
+  - variables:
+      attr_command: "{{ trigger.to_state.attributes.event_type | default(none) }}"
+      state_command: "{{ trigger.to_state.state }}"
+      
+      command: >
+        {% if attr_command is not none %}
+          {{ attr_command }}
+        {% else %}
+          {{ state_command }}
+        {% endif %}
+
+      mqtt_topic: !input mqtt_topic
+
+  # Stop if the command is empty or invalid
+  - condition: template
+    value_template: "{{ command not in ['unknown', 'unavailable', '', 'None'] }}"
+
+  - choose:
+      # ------------------------------------------------------
+      # Up Single (Turn On With AL)
+      # ------------------------------------------------------
+      - conditions: "{{ command == 'up_single' }}"
+        sequence:
+          # Modified to use Adaptive Lighting as requested
+          - action: adaptive_lighting.apply
+            target: {}
+            data:
+              lights: 
+                - !input target_light
+              turn_on_lights: true
+          - action: adaptive_lighting.set_manual_control
+            target: {}
+            data:
+              lights: 
+                - !input target_light
+              manual_control: false
+
+      # ------------------------------------------------------
+      # Up Double (Turn On Brightness 100%)
+      # ------------------------------------------------------
+      - conditions: "{{ command == 'up_double' }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: !input target_light
+            data:
+              brightness_pct: 100
+              kelvin: "{{ state_attr('!input adaptive_lighting_switch', 'color_temp_kelvin') | int }}"
+          - action: adaptive_lighting.set_manual_control
+            target: {}
+            data:
+              lights: 
+                - !input target_light
+              manual_control: true
+
+      # ------------------------------------------------------
+      # Up Tripple (Turn On Brightness 100%)
+      # ------------------------------------------------------
+      - conditions: "{{ command == 'up_triple' }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: !input target_light
+            data:
+              brightness_pct: 100
+              kelvin: 3000
+
+      # ------------------------------------------------------
+      # Up Held (Start Dim Up via MQTT)
+      # ------------------------------------------------------
+      - conditions: "{{ command == 'up_held' }}"
+        sequence:
+          - action: mqtt.publish
+            data:
+              topic: !input mqtt_topic
+              payload: '{"brightness_move": 40}'
+          - action: adaptive_lighting.set_manual_control
+            target: {}
+            data:
+              lights: 
+                - !input target_light
+              manual_control: true
+
+      # ------------------------------------------------------
+      # Down Single (Turn Off)
+      # ------------------------------------------------------
+      - conditions: "{{ command == 'down_single' }}"
+        sequence:
+          - action: light.turn_off
+            target:
+              entity_id: !input target_light
+
+      # ------------------------------------------------------
+      # Down Double (Turn On Brightness 30%)
+      # ------------------------------------------------------
+      - conditions: "{{ command == 'down_double' }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: !input target_light
+            data:
+              brightness_pct: 30
+              kelvin: "{{ state_attr('!input adaptive_lighting_switch', 'color_temp_kelvin') | int }}"
+          - action: adaptive_lighting.set_manual_control
+            target: {}
+            data:
+              lights: 
+                - !input target_light
+              manual_control: true
+
+      # ------------------------------------------------------
+      # Down Tripple (Turn On Brightness 10% Warm)
+      # ------------------------------------------------------
+      - conditions: "{{ command == 'down_triple' }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: !input target_light
+            data:
+              brightness_pct: 10
+              kelvin: 2200
+
+      # ------------------------------------------------------
+      # Down Held (Start Dim Down via MQTT)
+      # ------------------------------------------------------
+      - conditions: "{{ command == 'down_held' }}"
+        sequence:
+          - action: mqtt.publish
+            data:
+              topic: !input mqtt_topic
+              payload: '{"brightness_move": -30}'
+          - action: adaptive_lighting.set_manual_control
+            target: {}
+            data:
+              lights: 
+                - !input target_light
+              manual_control: true
+
+      # ------------------------------------------------------
+      # Down/Up Released (Stop Dim via MQTT)
+      # ------------------------------------------------------
+      - conditions: "{{ command in ['down_release', 'up_release', 'long_touch_timeout'] }}"
+        sequence:
+          - action: mqtt.publish
+            data:
+              topic: !input mqtt_topic
+              payload: '{"brightness_move": 0}'
+
+      # ------------------------------------------------------
+      # Swipe Up Action
+      # ------------------------------------------------------
+      - conditions: "{{ command == 'swipe_up' }}"
+        sequence: !input swipe_up_action
+
+      # ------------------------------------------------------
+      # Swipe Down Action
+      # ------------------------------------------------------
+      - conditions: "{{ command == 'swipe_down' }}"
+        sequence: !input swipe_down_action
+
+      # ------------------------------------------------------
+      # Full Touch Action
+      # ------------------------------------------------------
+      - conditions: "{{ command == 'full_touch' }}"
+        sequence: !input full_touch_action
+
+mode: restart
+max_exceeded: silent
