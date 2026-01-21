@@ -1,0 +1,154 @@
+blueprint:
+  name: Ikea SOMRIG (MQTT Brightness Move)
+  description: >
+    Controls a light using Ikea SOMRIG. 
+    Uses native MQTT 'brightness_move' commands for smooth dimming.
+    
+    Button 1 Short: Turn On (Auto AL)
+    Button 2 Short: Turn Off
+    Button 1 Hold: Zigbee Dim Up (Manual AL)
+    Button 2 Hold: Zigbee Dim Down (Manual AL)
+    Button 1/2 Release: Stop Dimming
+    Button 1 Double: Max Brightness/Cool (Manual AL)
+    Button 2 Double: Night Light/Warm (Manual AL)
+  domain: automation
+  input:
+    remote_entity:
+      name: Remote Action Sensor
+      description: The sensor entity provided by Zigbee2MQTT (e.g., sensor.somrig_action)
+      selector:
+        entity:
+          domain: sensor
+    mqtt_topic:
+      name: MQTT Set Topic
+      description: The Zigbee2MQTT topic to publish to (e.g., zigbee2mqtt/MyLight/set)
+      selector:
+        text:
+    target_light:
+      name: Target Light Entity
+      description: The light entity (used for On/Off/Double Press commands)
+      selector:
+        entity:
+          domain: light
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input remote_entity
+    not_to: ""
+    not_from: ""
+
+action:
+  - variables:
+      attr_command: "{{ trigger.to_state.attributes.event_type | default(none) }}"
+      state_command: "{{ trigger.to_state.state }}"
+      
+      command: >
+        {% if attr_command is not none %}
+          {{ attr_command }}
+        {% else %}
+          {{ state_command }}
+        {% endif %}
+
+      mqtt_topic: !input mqtt_topic
+
+  - choose:
+      # ------------------------------------------------------
+      # Button 1: Short Release (Turn On + Enable AL)
+      # ------------------------------------------------------
+      - conditions: "{{ command == '1_short_release' }}"
+        sequence:
+          # Modified to use Adaptive Lighting as requested
+          - action: adaptive_lighting.apply
+            target: {}
+            data:
+              lights: 
+                - !input target_light
+              turn_on_lights: true
+          - action: adaptive_lighting.set_manual_control
+            target: {}
+            data:
+              lights: 
+                - !input target_light
+              manual_control: false
+
+      # ------------------------------------------------------
+      # Button 2: Short Release (Turn Off)
+      # ------------------------------------------------------
+      - conditions: "{{ command == '2_short_release' }}"
+        sequence:
+          - service: light.turn_off
+            target:
+              entity_id: !input target_light
+
+      # ------------------------------------------------------
+      # Button 1: Long Press (Start Dim Up via MQTT)
+      # ------------------------------------------------------
+      - conditions: "{{ command == '1_long_press' }}"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input adaptive_switch
+          - service: mqtt.publish
+            data:
+              topic: "{{ mqtt_topic }}"
+              payload: '{"brightness_move": 40}'
+
+      # ------------------------------------------------------
+      # Button 2: Long Press (Start Dim Down via MQTT)
+      # ------------------------------------------------------
+      - conditions: "{{ command == '2_long_press' }}"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input adaptive_switch
+          - service: mqtt.publish
+            data:
+              topic: "{{ mqtt_topic }}"
+              payload: '{"brightness_move": -40}'
+
+      # ------------------------------------------------------
+      # ANY Long Release (Stop Dimming via MQTT)
+      # ------------------------------------------------------
+      - conditions: 
+          - condition: template
+            value_template: "{{ command in ['1_long_release', '2_long_release'] }}"
+        sequence:
+          - service: mqtt.publish
+            data:
+              topic: "{{ mqtt_topic }}"
+              payload: '{"brightness_move": 0}'
+
+      # ------------------------------------------------------
+      # Button 1: Double Press (Max Brightness / Cool)
+      # ------------------------------------------------------
+      - conditions: "{{ command == '1_double_press' }}"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input adaptive_switch
+          - service: light.turn_on
+            target:
+              entity_id: !input target_light
+            data:
+              brightness_pct: 100
+              kelvin: 3000
+              transition: 1
+
+      # ------------------------------------------------------
+      # Button 2: Double Press (Low Brightness / Warm)
+      # ------------------------------------------------------
+      - conditions: "{{ command == '2_double_press' }}"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: !input adaptive_switch
+          - service: light.turn_on
+            target:
+              entity_id: !input target_light
+            data:
+              brightness_pct: 10
+              kelvin: 2200
+              transition: 1
