@@ -88,9 +88,12 @@ action:
       # ------------------------------------------------------
       - conditions: "{{ command == '1_long_press' }}"
         sequence:
-          - service: switch.turn_off
-            target:
-              entity_id: !input adaptive_switch
+          - action: adaptive_lighting.set_manual_control
+            target: {}
+            data:
+              lights: 
+                - !input target_light
+              manual_control: true
           - service: mqtt.publish
             data:
               topic: "{{ mqtt_topic }}"
@@ -101,9 +104,12 @@ action:
       # ------------------------------------------------------
       - conditions: "{{ command == '2_long_press' }}"
         sequence:
-          - service: switch.turn_off
-            target:
-              entity_id: !input adaptive_switch
+          - action: adaptive_lighting.set_manual_control
+            target: {}
+            data:
+              lights: 
+                - !input target_light
+              manual_control: true
           - service: mqtt.publish
             data:
               topic: "{{ mqtt_topic }}"
@@ -126,9 +132,12 @@ action:
       # ------------------------------------------------------
       - conditions: "{{ command == '1_double_press' }}"
         sequence:
-          - service: switch.turn_off
-            target:
-              entity_id: !input adaptive_switch
+          - action: adaptive_lighting.set_manual_control
+            target: {}
+            data:
+              lights: 
+                - !input target_light
+              manual_control: true
           - service: light.turn_on
             target:
               entity_id: !input target_light
@@ -142,9 +151,12 @@ action:
       # ------------------------------------------------------
       - conditions: "{{ command == '2_double_press' }}"
         sequence:
-          - service: switch.turn_off
-            target:
-              entity_id: !input adaptive_switch
+          - action: adaptive_lighting.set_manual_control
+            target: {}
+            data:
+              lights: 
+                - !input target_light
+              manual_control: true
           - service: light.turn_on
             target:
               entity_id: !input target_light
