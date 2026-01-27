@@ -96,15 +96,16 @@ action:
       # ------------------------------------------------------
       # Up Single (Turn On With AL)
       # ------------------------------------------------------
-      - conditions: "{{ command == 'up_single' }}"
-        sequence:
-          # Modified to use Adaptive Lighting as requested
-          - action: adaptive_lighting.apply
-            target: {}
-            data:
-              lights: 
-                - !input target_light
-              turn_on_lights: true
+      - conditions: '{{ command == ''up_single'' }}'
+    sequence:
+         - action: light.turn_on
+           target:
+             entity_id: !input target_light
+           data:
+             brightness_pct: '{{ state_attr(''!input adaptive_lighting_switch'', ''brightness_pct'')
+               | int }}'
+             kelvin: '{{ state_attr(''!input adaptive_lighting_switch'', ''color_temp_kelvin'')
+               | int }}'
           - action: adaptive_lighting.set_manual_control
             target: {}
             data:
