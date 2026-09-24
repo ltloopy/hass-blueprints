@@ -1,0 +1,257 @@
+[
+    {
+        "id": "5d0c9e7a41b2f301",
+        "type": "comment",
+        "z": "d4aa01a310519d29",
+        "name": "Weather image: GET /weather169 or /weather916",
+        "info": "Returns the weather image for the current month, time of day and weather.\n\nURL: `/weather169` (16:9) or `/weather916` (9:16).\n\nFile names in `/data/`: `<Month>.<TimeOfDay>.<Weather>.<Ratio>.png`\nExample: `September.Morning.Clear.169.png`\n\n**Setup**\n1. Open \"Get weather\" and \"Get sun\". Select your Home Assistant server.\n2. Make sure that the weather entity is correct (`weather.forecast_home`).\n3. Open \"Pick image file\". Check `IMAGE_DIR`, `TIME_ZONE` and `EVENING_MINUTES`.\n4. Deploy.\n\n**Time of day** (from `sun.sun`)\n- Morning: dawn to solar noon\n- Afternoon: solar noon to 90 minutes before sunset\n- Evening: 90 minutes before sunset to dusk\n- Night: dusk to dawn\n\nIf the exact file does not exist, the flow tries similar weather (see the table in \"Pick image file\"). If no file exists, it returns 404. The status of \"Pick image file\" shows the last file.",
+        "x": 220,
+        "y": 740,
+        "wires": []
+    },
+    {
+        "id": "c1f7a2b8.e3a3e",
+        "type": "http in",
+        "z": "d4aa01a310519d29",
+        "name": "GET /weather<ratio>",
+        "url": "/weather:ratio",
+        "method": "get",
+        "upload": false,
+        "skipBodyParsing": false,
+        "swaggerDoc": "",
+        "x": 130,
+        "y": 800,
+        "wires": [
+            [
+                "8e4f2a61c7d3b902"
+            ]
+        ]
+    },
+    {
+        "id": "8e4f2a61c7d3b902",
+        "type": "api-current-state",
+        "z": "d4aa01a310519d29",
+        "name": "Get weather",
+        "server": "",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "weather.forecast_home",
+        "state_type": "str",
+        "blockInputOverrides": true,
+        "outputProperties": [
+            {
+                "property": "weather",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entityState"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "override_topic": false,
+        "state_location": "payload",
+        "override_payload": "msg",
+        "entity_location": "data",
+        "override_data": "msg",
+        "x": 330,
+        "y": 800,
+        "wires": [
+            [
+                "2b7d9c14e6a0f503"
+            ]
+        ]
+    },
+    {
+        "id": "2b7d9c14e6a0f503",
+        "type": "api-current-state",
+        "z": "d4aa01a310519d29",
+        "name": "Get sun",
+        "server": "",
+        "version": 3,
+        "outputs": 1,
+        "halt_if": "",
+        "halt_if_type": "str",
+        "halt_if_compare": "is",
+        "entity_id": "sun.sun",
+        "state_type": "str",
+        "blockInputOverrides": true,
+        "outputProperties": [
+            {
+                "property": "sun",
+                "propertyType": "msg",
+                "value": "",
+                "valueType": "entity"
+            }
+        ],
+        "for": "0",
+        "forType": "num",
+        "forUnits": "minutes",
+        "override_topic": false,
+        "state_location": "payload",
+        "override_payload": "msg",
+        "entity_location": "data",
+        "override_data": "msg",
+        "x": 500,
+        "y": 800,
+        "wires": [
+            [
+                "f3a81d5c90e2b604"
+            ]
+        ]
+    },
+    {
+        "id": "f3a81d5c90e2b604",
+        "type": "function",
+        "z": "d4aa01a310519d29",
+        "name": "Pick image file",
+        "func": "// Pick the image file for the current month, time of day and weather.\n// File name: <Month>.<TimeOfDay>.<Weather>.<Ratio>.png\n// Example:   September.Morning.Clear.169.png\n// Output 1: msg.filename is set. Output 2: 404 reply (no image).\n\n// ---- Settings -----------------------------------------------------------\nconst IMAGE_DIR = '/data/';            // Folder with the image files\nconst TIME_ZONE = 'America/Chicago';   // Your time zone (IANA name)\nconst EVENING_MINUTES = 90;            // Evening starts this many minutes before sunset\n\n// Home Assistant weather state -> weather names in the file names.\n// The flow uses the first name that has a file. The other names are similar weather.\nconst WEATHER_NAMES = {\n    'sunny':           ['Clear', 'PartlyCloudy'],\n    'clear-night':     ['Clear', 'PartlyCloudy'],\n    'partlycloudy':    ['PartlyCloudy', 'Clear', 'Cloudy'],\n    'cloudy':          ['Cloudy', 'PartlyCloudy'],\n    'fog':             ['Fog', 'Cloudy'],\n    'rainy':           ['Rainy', 'Pouring', 'Cloudy'],\n    'pouring':         ['Pouring', 'Rainy', 'Cloudy'],\n    'lightning':       ['Lightning', 'LightningRainy', 'Rainy', 'Cloudy'],\n    'lightning-rainy': ['LightningRainy', 'Lightning', 'Pouring', 'Rainy', 'Cloudy'],\n    'hail':            ['Hail', 'Pouring', 'Rainy', 'Cloudy'],\n    'snowy':           ['Snowy', 'SnowyRainy', 'Cloudy'],\n    'snowy-rainy':     ['SnowyRainy', 'Snowy', 'Rainy', 'Cloudy'],\n    'windy':           ['Windy', 'PartlyCloudy', 'Clear'],\n    'windy-variant':   ['Windy', 'Cloudy', 'PartlyCloudy'],\n    'exceptional':     ['Exceptional', 'Cloudy'],\n};\n// Used when the weather state is not in the table (for example \"unavailable\").\nconst UNKNOWN_WEATHER_NAMES = ['PartlyCloudy', 'Clear', 'Cloudy'];\n// --------------------------------------------------------------------------\n\nconst ratio = String((msg.req && msg.req.params && msg.req.params.ratio) || '');\nif (!/^\\d+$/.test(ratio)) {\n    node.status({ fill: 'red', shape: 'ring', text: `Bad ratio: ${ratio}` });\n    return notFound(`Unknown aspect ratio \"${ratio}\". Use /weather169 or /weather916.`);\n}\n\nconst now = new Date();\nconst month = new Intl.DateTimeFormat('en-US', { timeZone: TIME_ZONE, month: 'long' }).format(now);\nconst timeOfDay = sunTimeOfDay(msg.sun, now) || clockTimeOfDay(now);\nconst weather = String(msg.weather || '').toLowerCase();\nconst knownWeather = Object.prototype.hasOwnProperty.call(WEATHER_NAMES, weather);\nconst weatherNames = knownWeather ? WEATHER_NAMES[weather] : UNKNOWN_WEATHER_NAMES;\n\nconst tried = [];\nfor (const name of weatherNames) {\n    const file = `${month}.${timeOfDay}.${name}.${ratio}.png`;\n    tried.push(file);\n    if (fs.existsSync(IMAGE_DIR + file)) {\n        msg.filename = IMAGE_DIR + file;\n        node.status(knownWeather\n            ? { fill: 'green', shape: 'dot', text: file }\n            : { fill: 'yellow', shape: 'dot', text: `${file} (weather: ${weather || 'none'})` });\n        return [msg, null];\n    }\n}\n\nnode.status({ fill: 'red', shape: 'ring', text: `No image: ${tried[0]}` });\nreturn notFound(`No image for weather \"${weather}\". Tried: ${tried.join(', ')}`);\n\n// Send a 404 text reply on output 2.\nfunction notFound(text) {\n    msg.statusCode = 404;\n    msg.headers = { 'content-type': 'text/plain; charset=utf-8' };\n    msg.payload = text;\n    return [null, msg];\n}\n\n// Time of day from the Home Assistant sun.sun entity. Returns null if the data is not usable.\n//   Morning:   dawn to solar noon\n//   Afternoon: solar noon to EVENING_MINUTES before sunset\n//   Evening:   EVENING_MINUTES before sunset to dusk\n//   Night:     dusk to dawn\nfunction sunTimeOfDay(sun, now) {\n    const a = (sun && sun.attributes) || {};\n    const dawn = Date.parse(a.next_dawn);\n    const dusk = Date.parse(a.next_dusk);\n    const noon = Date.parse(a.next_noon);\n    const setting = Date.parse(a.next_setting);\n    if ([dawn, dusk, noon, setting].some(Number.isNaN)) {\n        return null;\n    }\n    if (dawn < dusk) return 'Night';        // Dusk is past. Dawn is next.\n    if (setting > dusk) return 'Evening';   // Sunset is past. Dusk is next.\n    if (noon < setting) return 'Morning';   // Solar noon is next.\n    if (setting - now.getTime() <= EVENING_MINUTES * 60 * 1000) return 'Evening';\n    return 'Afternoon';\n}\n\n// Time of day from the clock. Used only when the sun data is not available.\nfunction clockTimeOfDay(now) {\n    const hour = Number(new Intl.DateTimeFormat('en-US', { timeZone: TIME_ZONE, hour: 'numeric', hourCycle: 'h23' }).format(now)) % 24;\n    if (hour >= 5 && hour < 12) return 'Morning';\n    if (hour >= 12 && hour < 17) return 'Afternoon';\n    if (hour >= 17 && hour < 21) return 'Evening';\n    return 'Night';\n}\n",
+        "outputs": 2,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [
+            {
+                "var": "fs",
+                "module": "fs"
+            }
+        ],
+        "outputLabels": [
+            "image file",
+            "404 no image"
+        ],
+        "x": 680,
+        "y": 800,
+        "wires": [
+            [
+                "e5f2e6b.e1c0d18"
+            ],
+            [
+                "b4a6f8c.f4b5908"
+            ]
+        ]
+    },
+    {
+        "id": "e5f2e6b.e1c0d18",
+        "type": "file in",
+        "z": "d4aa01a310519d29",
+        "name": "Read image",
+        "filename": "filename",
+        "filenameType": "msg",
+        "format": "",
+        "chunk": false,
+        "sendError": false,
+        "encoding": "none",
+        "allProps": false,
+        "x": 870,
+        "y": 780,
+        "wires": [
+            [
+                "a9d3e7f.f562c18"
+            ]
+        ]
+    },
+    {
+        "id": "a9d3e7f.f562c18",
+        "type": "change",
+        "z": "d4aa01a310519d29",
+        "name": "Set PNG headers",
+        "rules": [
+            {
+                "t": "set",
+                "p": "headers",
+                "pt": "msg",
+                "to": "{\"content-type\":\"image/png\",\"cache-control\":\"no-cache\"}",
+                "tot": "json"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1060,
+        "y": 780,
+        "wires": [
+            [
+                "b4a6f8c.f4b5908"
+            ]
+        ]
+    },
+    {
+        "id": "b4a6f8c.f4b5908",
+        "type": "http response",
+        "z": "d4aa01a310519d29",
+        "name": "Return image",
+        "statusCode": "",
+        "headers": {},
+        "x": 1260,
+        "y": 800,
+        "wires": []
+    },
+    {
+        "id": "a6c2e8f17b4d9005",
+        "type": "catch",
+        "z": "d4aa01a310519d29",
+        "name": "Catch errors",
+        "scope": [
+            "8e4f2a61c7d3b902",
+            "2b7d9c14e6a0f503",
+            "f3a81d5c90e2b604",
+            "e5f2e6b.e1c0d18"
+        ],
+        "uncaught": false,
+        "x": 870,
+        "y": 860,
+        "wires": [
+            [
+                "0e9b3f7d2c8a1606"
+            ]
+        ]
+    },
+    {
+        "id": "0e9b3f7d2c8a1606",
+        "type": "change",
+        "z": "d4aa01a310519d29",
+        "name": "Set 500 error",
+        "rules": [
+            {
+                "t": "set",
+                "p": "statusCode",
+                "pt": "msg",
+                "to": "500",
+                "tot": "num"
+            },
+            {
+                "t": "set",
+                "p": "headers",
+                "pt": "msg",
+                "to": "{\"content-type\":\"text/plain; charset=utf-8\"}",
+                "tot": "json"
+            },
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "error.message",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1060,
+        "y": 860,
+        "wires": [
+            [
+                "b4a6f8c.f4b5908"
+            ]
+        ]
+    }
+]
