@@ -102,7 +102,7 @@ action:
               # _onoff (Move with On/Off) turns an off light on before ramping; plain
               # brightness_move does nothing to an off light. Down hold keeps plain
               # brightness_move, because _onoff would switch the light off at minimum.
-              payload: '{"brightness_move_onoff": 40}'
+              payload: '{"brightness_move_onoff": 25}'
 
       # ------------------------------------------------------
       # Button 2: Long Press (Start Dim Down via MQTT)
