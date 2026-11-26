@@ -37,8 +37,10 @@ max_exceeded: silent
 trigger:
   - platform: state
     entity_id: !input remote_entity
-    not_to: ""
-    not_from: ""
+    # On an MQTT/Z2M reconnect the event entity comes back from unavailable
+    # holding its last press; without not_from that press would replay.
+    not_to: ['unavailable', 'unknown', '']
+    not_from: ['unavailable', 'unknown', '']
 
 action:
   - variables:
@@ -97,7 +99,10 @@ action:
           - service: mqtt.publish
             data:
               topic: "{{ mqtt_topic }}"
-              payload: '{"brightness_move": 40}'
+              # _onoff (Move with On/Off) turns an off light on before ramping; plain
+              # brightness_move does nothing to an off light. Down hold keeps plain
+              # brightness_move, because _onoff would switch the light off at minimum.
+              payload: '{"brightness_move_onoff": 40}'
 
       # ------------------------------------------------------
       # Button 2: Long Press (Start Dim Down via MQTT)
@@ -143,7 +148,7 @@ action:
               entity_id: !input target_light
             data:
               brightness_pct: 100
-              kelvin: 3000
+              color_temp_kelvin: 3000
               transition: 1
 
       # ------------------------------------------------------
@@ -162,5 +167,5 @@ action:
               entity_id: !input target_light
             data:
               brightness_pct: 10
-              kelvin: 2200
+              color_temp_kelvin: 2200
               transition: 1
